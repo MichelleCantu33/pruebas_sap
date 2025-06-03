@@ -712,20 +712,41 @@ def crear_caja_instrumental():
     try:
         cursor = conn.cursor()
 
-        # Insertar cabecera
+        # 🔍 Validar si el Code ya existe
         cursor.execute("""
-            INSERT INTO "PRU_BIOCELLS_20250509"."@LS_CAJ_CAB" ("Code", "U_LS_FECHA", "U_LS_ALM", "U_LS_CLASECAJA")
-            VALUES (?, ?, ?, ?)
-        """, (data["CodigoCaja"], data["FechaCaja"], data["Almacen"], data["ClaseCaja"]))
+            SELECT COUNT(*) FROM "PRU_BIOCELLS_20250509"."@LS_CAJ_CAB" WHERE "Code" = ?
+        """, (data["CodigoCaja"],))
+        if cursor.fetchone()[0] > 0:
+            return jsonify({"error": f"La caja con código '{data['CodigoCaja']}' ya existe"}), 409
 
-        # Insertar líneas
-        for linea in data["Lineas"]:
+        # 🆕 Obtener el nuevo DocEntry
+        cursor.execute('SELECT MAX("DocEntry") FROM "PRU_BIOCELLS_20250509"."@LS_CAJ_CAB"')
+        ultimo_docentry = cursor.fetchone()[0] or 0
+        nuevo_docentry = ultimo_docentry + 1
+
+        # 🧾 Insertar cabecera
+        cursor.execute("""
+            INSERT INTO "PRU_BIOCELLS_20250509"."@LS_CAJ_CAB"
+            ("DocEntry", "Code", "U_LS_FECHA", "U_LS_ALM", "U_LS_CLASECAJA")
+            VALUES (?, ?, ?, ?, ?)
+        """, (
+            nuevo_docentry,
+            data["CodigoCaja"],
+            data["FechaCaja"],
+            data["Almacen"],
+            data["ClaseCaja"]
+        ))
+
+        # 📦 Insertar líneas
+        for i, linea in enumerate(data["Lineas"], start=1):
             cursor.execute("""
-                INSERT INTO "PRU_BIOCELLS_20250509"."@LS_CAJ_LIN" ("Code", "LineId", "U_LS_ITEM", "U_LS_CANT", "U_LS_TIPO", "U_LS_LOTE")
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO "PRU_BIOCELLS_20250509"."@LS_CAJ_LIN"
+                ("DocEntry", "Code", "LineId", "U_LS_ITEM", "U_LS_CANT", "U_LS_TIPO", "U_LS_LOTE")
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (
+                nuevo_docentry,
                 data["CodigoCaja"],
-                linea["NumeroLinea"],
+                i,
                 linea["CodigoItem"],
                 linea["CantidadItem"],
                 linea["TipoItem"],
@@ -733,11 +754,15 @@ def crear_caja_instrumental():
             ))
 
         conn.commit()
-        return jsonify({"mensaje": "Caja creada correctamente"}), 201
+        return jsonify({
+            "mensaje": "Caja creada correctamente",
+            "DocEntry": nuevo_docentry,
+            "CodigoCaja": data["CodigoCaja"]
+        }), 201
 
     except Exception as e:
         conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"Error al crear la caja: {str(e)}"}), 500
     finally:
         conn.close()
         
