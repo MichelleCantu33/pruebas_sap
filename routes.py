@@ -782,3 +782,101 @@ def obtener_cajas_instrumental():
         return jsonify({"error": str(e)}), 500
     finally:
         conn.close()
+
+@app.route('/cajas-instrumental/<codigo>', methods=['PUT'])
+def actualizar_caja_instrumental(codigo):
+    data = request.json
+    conn = get_hana_connection()
+    if conn is None:
+        return jsonify({"error": "No se pudo conectar a HANA"}), 500
+
+    try:
+        cursor = conn.cursor()
+
+        # Verificar que la caja existe
+        cursor.execute("""
+            SELECT COUNT(*) FROM "PRU_BIOCELLS_20250509"."@LS_CAJ_CAB"
+            WHERE "Code" = ?
+        """, (codigo,))
+        if cursor.fetchone()[0] == 0:
+            return jsonify({"error": f"La caja '{codigo}' no existe"}), 404
+
+        # Actualizar cabecera
+        cursor.execute("""
+            UPDATE "PRU_BIOCELLS_20250509"."@LS_CAJ_CAB"
+            SET "U_LS_FECHA" = ?, "U_LS_ALM" = ?, "U_LS_CLASECAJA" = ?
+            WHERE "Code" = ?
+        """, (
+            data["FechaCaja"],
+            data["Almacen"],
+            data["ClaseCaja"],
+            codigo
+        ))
+
+        # Eliminar líneas existentes
+        cursor.execute("""
+            DELETE FROM "PRU_BIOCELLS_20250509"."@LS_CAJ_LIN"
+            WHERE "Code" = ?
+        """, (codigo,))
+
+        # Insertar nuevas líneas
+        for i, linea in enumerate(data["Lineas"], start=1):
+            cursor.execute("""
+                INSERT INTO "PRU_BIOCELLS_20250509"."@LS_CAJ_LIN"
+                ("Code", "LineId", "U_LS_ITEM", "U_LS_CANT", "U_LS_TIPO", "U_LS_LOTE")
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                codigo,
+                i,
+                linea["CodigoItem"],
+                linea["CantidadItem"],
+                linea["TipoItem"],
+                linea["LoteItem"]
+            ))
+
+        conn.commit()
+        return jsonify({"mensaje": f"Caja '{codigo}' actualizada correctamente"}), 200
+
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"error": f"Error al actualizar la caja: {str(e)}"}), 500
+    finally:
+        conn.close()
+
+@app.route('/cajas-instrumental/<codigo>', methods=['DELETE'])
+def eliminar_caja_instrumental(codigo):
+    conn = get_hana_connection()
+    if conn is None:
+        return jsonify({"error": "No se pudo conectar a HANA"}), 500
+
+    try:
+        cursor = conn.cursor()
+
+        # Verificar que la caja existe
+        cursor.execute("""
+            SELECT COUNT(*) FROM "PRU_BIOCELLS_20250509"."@LS_CAJ_CAB"
+            WHERE "Code" = ?
+        """, (codigo,))
+        if cursor.fetchone()[0] == 0:
+            return jsonify({"error": f"La caja '{codigo}' no existe"}), 404
+
+        # Eliminar líneas
+        cursor.execute("""
+            DELETE FROM "PRU_BIOCELLS_20250509"."@LS_CAJ_LIN"
+            WHERE "Code" = ?
+        """, (codigo,))
+
+        # Eliminar cabecera
+        cursor.execute("""
+            DELETE FROM "PRU_BIOCELLS_20250509"."@LS_CAJ_CAB"
+            WHERE "Code" = ?
+        """, (codigo,))
+
+        conn.commit()
+        return jsonify({"mensaje": f"Caja '{codigo}' eliminada correctamente"}), 200
+
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"error": f"Error al eliminar la caja: {str(e)}"}), 500
+    finally:
+        conn.close()
