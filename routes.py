@@ -742,7 +742,7 @@ def crear_caja_instrumental():
 # Pero en LÍNEAS NO incluir DocEntry si no existe
         for i, linea in enumerate(data["Lineas"], start=1):
             cursor.execute("""
-                INSERT INTO "EC_SBO_BIOCELLS_PROD"."@LS_CAJ_LIN"
+                INSERT INTO "PRU_BIOCELLS_20250509"."@LS_CAJ_LIN"
                 ("Code", "LineId", "U_LS_ITEM", "U_LS_CANT", "U_LS_TIPO", "U_LS_LOTE")
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (
