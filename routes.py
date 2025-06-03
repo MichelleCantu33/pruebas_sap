@@ -738,13 +738,14 @@ def crear_caja_instrumental():
         ))
 
         # 📦 Insertar líneas
+        # Ajuste: SOLO insertar DocEntry en CABECERA
+# Pero en LÍNEAS NO incluir DocEntry si no existe
         for i, linea in enumerate(data["Lineas"], start=1):
             cursor.execute("""
-                INSERT INTO "PRU_BIOCELLS_20250509"."@LS_CAJ_LIN"
-                ("DocEntry", "Code", "LineId", "U_LS_ITEM", "U_LS_CANT", "U_LS_TIPO", "U_LS_LOTE")
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO "EC_SBO_BIOCELLS_PROD"."@LS_CAJ_LIN"
+                ("Code", "LineId", "U_LS_ITEM", "U_LS_CANT", "U_LS_TIPO", "U_LS_LOTE")
+                VALUES (?, ?, ?, ?, ?, ?)
             """, (
-                nuevo_docentry,
                 data["CodigoCaja"],
                 i,
                 linea["CodigoItem"],
