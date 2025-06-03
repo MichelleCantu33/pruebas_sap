@@ -1,0 +1,47 @@
+{
+    "Series": 27,
+    "Printed": "tNO",
+    "DocDate": "2025-01-20T00:00:00Z",
+    "DueDate": "2025-01-20T00:00:00Z",
+    "CardCode": "CN1791994191001",
+    "Comments": "Prueba Archivo",
+    "JournalMemo": "Inventory Transfers - C1717172850001",
+    "FromWarehouse": "1018",
+    "ToWarehouse": "2010",
+    "CreationDate": "2025-04-03T00:00:00Z",
+    "UpdateDate": "2025-04-03T00:00:00Z",
+    "FinancialPeriod": 48,
+    "TaxDate": "2025-04-03T00:00:00Z",
+    "AuthorizationStatus": "sasWithout",
+    "DocumentStatus": "bost_Open",
+    "U_SYP_TIPCOMPRA": "01",
+    "U_SYP_TIPDES": "VENTA",
+    "U_SYP_TIMPO": "CFR",
+    "U_SYP_EXPORTACION": "NO",
+    "U_SYP_TIPOPAGO": "01",
+    "U_SYP_ADTPAGO": "NO",
+    "StockTransferLines": [
+        {
+            "LineNum": 0,
+            "ItemCode": "BVF-DBM-5",
+            "ItemDescription": "MATRIZ ÓSEA DESMINERALIZADA REFICIO (5 cc)",
+            "Quantity": 1,
+            "WarehouseCode": "2010",
+            "FromWarehouseCode": "1018",
+            "Factor": 1.0,
+            "UseBaseUnits": "tYES",
+            "UoMCode": "Manual",
+            "LineStatus": "bost_Open",
+            "BatchNumbers": [
+                {
+                    "BatchNumber": "03-3537460",
+                    "ManufacturerSerialNumber": "03-3537460",
+                    "ExpiryDate": "2025-12-08T00:00:00Z",
+                    "Quantity": 1.0,
+                    "BaseLineNumber": 0,
+                    "ItemCode": "BVF-DBM-5"
+                }
+            ]
+        }
+    ]
+}
