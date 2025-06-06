@@ -887,7 +887,7 @@ def eliminar_caja_instrumental(codigo):
         conn.close()
 
 @app.route('/warehouses', methods=['GET'])
-def get_warehouses():
+def warehouses():
     login_sap_url = "https://54.184.71.204:50000/b1s/v1/Login"
     sap_data = {
         "CompanyDB": "PRU_BIOCELLS_20250509",
