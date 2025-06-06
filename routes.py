@@ -803,15 +803,16 @@ def actualizar_caja_instrumental(codigo):
         if cursor.fetchone()[0] == 0:
             return jsonify({"error": f"La caja '{codigo}' no existe"}), 404
 
-        # Actualizar cabecera
+        # Actualizar cabecera (incluyendo U_LS_ITEM con el mismo código)
         cursor.execute("""
             UPDATE "PRU_BIOCELLS_20250509"."@LS_CAJ_CAB"
-            SET "U_LS_FECHA" = ?, "U_LS_ALM" = ?, "U_LS_CLASECAJA" = ?
+            SET "U_LS_FECHA" = ?, "U_LS_ALM" = ?, "U_LS_CLASECAJA" = ?, "U_LS_ITEM" = ?
             WHERE "Code" = ?
         """, (
             data["FechaCaja"],
             data["Almacen"],
             data["ClaseCaja"],
+            codigo,
             codigo
         ))
 
@@ -821,16 +822,18 @@ def actualizar_caja_instrumental(codigo):
             WHERE "Code" = ?
         """, (codigo,))
 
-        # Insertar nuevas líneas
+        # Insertar nuevas líneas con campo opcional Descripcion (U_LS_ITEM_NAME)
         for i, linea in enumerate(data["Lineas"], start=1):
+            descripcion = linea.get("Descripcion")
             cursor.execute("""
                 INSERT INTO "PRU_BIOCELLS_20250509"."@LS_CAJ_LIN"
-                ("Code", "LineId", "U_LS_ITEM", "U_LS_CANT", "U_LS_TIPO", "U_LS_LOTE")
-                VALUES (?, ?, ?, ?, ?, ?)
+                ("Code", "LineId", "U_LS_ITEM", "U_LS_ITEM_NAME", "U_LS_CANT", "U_LS_TIPO", "U_LS_LOTE")
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (
                 codigo,
                 i,
                 linea["CodigoItem"],
+                descripcion,
                 linea["CantidadItem"],
                 linea["TipoItem"],
                 linea["LoteItem"]
