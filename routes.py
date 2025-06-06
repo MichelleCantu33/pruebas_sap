@@ -896,42 +896,28 @@ def warehouses():
     }
 
     try:
-        # Login a SAP
-        login_response = requests.post(login_sap_url, json=sap_data, verify=False)
-        if login_response.status_code != 200:
-            return jsonify({'error': 'Error en el login de SAP', 'details': login_response.text}), login_response.status_code
+        response = requests.post(login_sap_url, json=sap_data, verify=False)
+        if response.status_code != 200:
+            return jsonify({'error': 'Error en login', 'details': response.text}), response.status_code
 
-        cookies = login_response.cookies
-        session_id = cookies.get("B1SESSION")
-        route_id = cookies.get("ROUTEID")
-
-        if not session_id or not route_id:
-            return jsonify({'error': 'No se obtuvieron cookies de sesión'}), 401
-
-        # Obtener todas las bodegas
+        cookies = response.cookies
         headers = {
             'Content-Type': 'application/json',
-            'Cookie': f'B1SESSION={session_id}; ROUTEID={route_id}'
+            'Cookie': f'B1SESSION={cookies.get("B1SESSION")}; ROUTEID={cookies.get("ROUTEID")}'
         }
-        warehouses_url = "https://54.184.71.204:50000/b1s/v1/Warehouses?$select=WarehouseCode,WarehouseName"
-        warehouses_response = requests.get(warehouses_url, headers=headers, verify=False)
 
-        if warehouses_response.status_code != 200:
-            return jsonify({'error': 'Error al obtener bodegas', 'details': warehouses_response.text}), warehouses_response.status_code
+        # 👇 Aquí se obtienen todas las bodegas
+        response_warehouses = requests.get(
+            'https://54.184.71.204:50000/b1s/v1/Warehouses?$select=WarehouseCode,WarehouseName',
+            headers=headers,
+            verify=False
+        )
 
-        data = warehouses_response.json()
-        warehouses = data.get('value', [])
+        if response_warehouses.status_code == 200:
+            data = response_warehouses.json()
+            return jsonify({'warehouses': data.get('value', [])})
+        else:
+            return jsonify({'error': 'Error al obtener bodegas', 'details': response_warehouses.text}), response_warehouses.status_code
 
-        # Solo devolver Código y Nombre
-        lista = [
-            {
-                "WarehouseCode": w.get("WarehouseCode"),
-                "WarehouseName": w.get("WarehouseName")
-            }
-            for w in warehouses
-        ]
-
-        return jsonify({'warehouses': lista}), 200
-
-    except requests.exceptions.RequestException as e:
-        return jsonify({'error': 'No se pudo conectar con SAP', 'details': str(e)}), 500
+    except Exception as e:
+        return jsonify({'error': 'Fallo de conexión o excepción', 'details': str(e)}), 500
