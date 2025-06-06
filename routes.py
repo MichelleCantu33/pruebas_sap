@@ -885,3 +885,53 @@ def eliminar_caja_instrumental(codigo):
         return jsonify({"error": f"Error al eliminar la caja: {str(e)}"}), 500
     finally:
         conn.close()
+
+@app.route('/warehouses', methods=['GET'])
+def get_warehouses():
+    login_sap_url = "https://54.184.71.204:50000/b1s/v1/Login"
+    sap_data = {
+        "CompanyDB": "PRU_BIOCELLS_20250509",
+        "UserName": "manager",
+        "Password": "Start1234"
+    }
+
+    try:
+        # Login a SAP
+        login_response = requests.post(login_sap_url, json=sap_data, verify=False)
+        if login_response.status_code != 200:
+            return jsonify({'error': 'Error en el login de SAP', 'details': login_response.text}), login_response.status_code
+
+        cookies = login_response.cookies
+        session_id = cookies.get("B1SESSION")
+        route_id = cookies.get("ROUTEID")
+
+        if not session_id or not route_id:
+            return jsonify({'error': 'No se obtuvieron cookies de sesión'}), 401
+
+        # Obtener todas las bodegas
+        headers = {
+            'Content-Type': 'application/json',
+            'Cookie': f'B1SESSION={session_id}; ROUTEID={route_id}'
+        }
+        warehouses_url = "https://54.184.71.204:50000/b1s/v1/Warehouses?$select=WarehouseCode,WarehouseName"
+        warehouses_response = requests.get(warehouses_url, headers=headers, verify=False)
+
+        if warehouses_response.status_code != 200:
+            return jsonify({'error': 'Error al obtener bodegas', 'details': warehouses_response.text}), warehouses_response.status_code
+
+        data = warehouses_response.json()
+        warehouses = data.get('value', [])
+
+        # Solo devolver Código y Nombre
+        lista = [
+            {
+                "WarehouseCode": w.get("WarehouseCode"),
+                "WarehouseName": w.get("WarehouseName")
+            }
+            for w in warehouses
+        ]
+
+        return jsonify({'warehouses': lista}), 200
+
+    except requests.exceptions.RequestException as e:
+        return jsonify({'error': 'No se pudo conectar con SAP', 'details': str(e)}), 500
