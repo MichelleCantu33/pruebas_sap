@@ -724,31 +724,32 @@ def crear_caja_instrumental():
         ultimo_docentry = cursor.fetchone()[0] or 0
         nuevo_docentry = ultimo_docentry + 1
 
-        # 🧾 Insertar cabecera
+        # 🧾 Insertar cabecera (ahora con U_LS_ITEM)
         cursor.execute("""
             INSERT INTO "PRU_BIOCELLS_20250509"."@LS_CAJ_CAB"
-            ("DocEntry", "Code", "U_LS_FECHA", "U_LS_ALM", "U_LS_CLASECAJA")
-            VALUES (?, ?, ?, ?, ?)
+            ("DocEntry", "Code", "U_LS_FECHA", "U_LS_ALM", "U_LS_CLASECAJA", "U_LS_ITEM")
+            VALUES (?, ?, ?, ?, ?, ?)
         """, (
             nuevo_docentry,
             data["CodigoCaja"],
             data["FechaCaja"],
             data["Almacen"],
-            data["ClaseCaja"]
+            data["ClaseCaja"],
+            data["CodigoCaja"]  # U_LS_ITEM ← Código Caja
         ))
 
-        # 📦 Insertar líneas
-        # Ajuste: SOLO insertar DocEntry en CABECERA
-# Pero en LÍNEAS NO incluir DocEntry si no existe
+        # 📦 Insertar líneas con campo opcional Descripcion (U_LS_ITEM_NAME)
         for i, linea in enumerate(data["Lineas"], start=1):
+            descripcion = linea.get("Descripcion")  # puede ser None si no se envía
             cursor.execute("""
                 INSERT INTO "PRU_BIOCELLS_20250509"."@LS_CAJ_LIN"
-                ("Code", "LineId", "U_LS_ITEM", "U_LS_CANT", "U_LS_TIPO", "U_LS_LOTE")
-                VALUES (?, ?, ?, ?, ?, ?)
+                ("Code", "LineId", "U_LS_ITEM", "U_LS_ITEM_NAME", "U_LS_CANT", "U_LS_TIPO", "U_LS_LOTE")
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (
                 data["CodigoCaja"],
                 i,
                 linea["CodigoItem"],
+                descripcion,
                 linea["CantidadItem"],
                 linea["TipoItem"],
                 linea["LoteItem"]
@@ -766,6 +767,7 @@ def crear_caja_instrumental():
         return jsonify({"error": f"Error al crear la caja: {str(e)}"}), 500
     finally:
         conn.close()
+
         
 @app.route('/cajas-instrumental', methods=['GET'])
 def obtener_cajas_instrumental():
