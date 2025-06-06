@@ -4,7 +4,7 @@ import routes  # Importa las rutas
 
 @app.route('/')
 def index():
-    return 'Hola Biocells, desde Flask en Render'
+    return 'Hola Bio, desde Flask en Render'
 
 # Iniciar la aplicación Flask
 #if __name__ == '__main__':
