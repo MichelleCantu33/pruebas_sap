@@ -890,7 +890,7 @@ def eliminar_caja_instrumental(codigo):
 def warehouses():
     login_sap_url = "https://54.184.71.204:50000/b1s/v1/Login"
     sap_data = {
-        "CompanyDB": "PRU_BIOCELLS_20250509",
+        "CompanyDB": "EC_SBO_BIOCELLS_PROD",
         "UserName": "manager",
         "Password": "Start1234"
     }
