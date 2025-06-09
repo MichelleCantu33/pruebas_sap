@@ -919,15 +919,7 @@ def warehouses():
         return jsonify({'error': 'Fallo de conexión o excepción', 'details': str(e)}), 500
     
 # Ruta para manejar la carga del archivo Excel
-import os
-from werkzeug.utils import secure_filename
-import pandas as pd
-from flask import request, jsonify
 
-import os
-from werkzeug.utils import secure_filename
-import pandas as pd
-from flask import request, jsonify
 
 @app.route('/importar-cajas', methods=['POST'])
 def importar_cajas():
@@ -957,6 +949,12 @@ def importar_cajas():
         try:
             # Lee el archivo Excel con pandas
             df = pd.read_excel(filepath)
+
+            # Limpiar los nombres de las columnas
+            df.columns = df.columns.str.strip()
+
+            # Imprimir las columnas leídas desde el archivo Excel
+            print("Columnas limpias del archivo Excel:", df.columns)
 
             # Validar las columnas del archivo Excel
             required_columns = ["CodigoCaja", "FechaCaja", "Almacen", "ClaseCaja", "CodigoItem", "CantidadItem", "TipoItem", "LoteItem"]
