@@ -9,6 +9,8 @@ import json
 from sqlalchemy import text
 from flask_cors import CORS
 from datetime import datetime
+from werkzeug.utils import secure_filename
+import os
 
 # Configuración de credenciales de SAP
 SAP_LOGIN_URL = "https://54.184.71.204:50000/b1s/v1/Login"
@@ -915,3 +917,91 @@ def warehouses():
 
     except Exception as e:
         return jsonify({'error': 'Fallo de conexión o excepción', 'details': str(e)}), 500
+    
+# Ruta para manejar la carga del archivo Excel
+@app.route('/importar-cajas', methods=['POST'])
+def importar_cajas():
+    if 'file' not in request.files:
+        return jsonify({"error": "No se ha enviado un archivo"}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No se ha seleccionado un archivo"}), 400
+
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        filepath = os.path.join('/path/to/save', filename)
+        file.save(filepath)
+
+        try:
+            # Leemos el archivo Excel con pandas
+            df = pd.read_excel(filepath)
+
+            # Validar las columnas del archivo Excel
+            required_columns = ["CodigoCaja", "FechaCaja", "Almacen", "ClaseCaja", "CodigoItem", "CantidadItem", "TipoItem", "LoteItem"]
+            for col in required_columns:
+                if col not in df.columns:
+                    return jsonify({"error": f"Falta la columna '{col}' en el archivo Excel"}), 400
+
+            # Conectar a SAP HANA
+            conn = get_hana_connection()
+            if conn is None:
+                return jsonify({"error": "No se pudo conectar a HANA"}), 500
+
+            cursor = conn.cursor()
+            for index, row in df.iterrows():
+                # Comprobar si el código de la caja ya existe
+                cursor.execute("""
+                    SELECT COUNT(*) FROM "PRU_BIOCELLS_20250509"."@LS_CAJ_CAB" WHERE "Code" = ?
+                """, (row["CodigoCaja"],))
+                if cursor.fetchone()[0] > 0:
+                    continue  # O manejar según lo que desees, como lanzar un error o loguear
+
+                # Obtener el nuevo DocEntry
+                cursor.execute('SELECT MAX("DocEntry") FROM "PRU_BIOCELLS_20250509"."@LS_CAJ_CAB"')
+                ultimo_docentry = cursor.fetchone()[0] or 0
+                nuevo_docentry = ultimo_docentry + 1
+
+                # Insertar cabecera
+                cursor.execute("""
+                    INSERT INTO "PRU_BIOCELLS_20250509"."@LS_CAJ_CAB"
+                    ("DocEntry", "Code", "U_LS_FECHA", "U_LS_ALM", "U_LS_CLASECAJA", "U_LS_ITEM")
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (
+                    nuevo_docentry,
+                    row["CodigoCaja"],
+                    row["FechaCaja"],
+                    row["Almacen"],
+                    row["ClaseCaja"],
+                    row["CodigoCaja"]
+                ))
+
+                # Insertar líneas
+                cursor.execute("""
+                    INSERT INTO "PRU_BIOCELLS_20250509"."@LS_CAJ_LIN"
+                    ("Code", "LineId", "U_LS_ITEM", "U_LS_ITEM_NAME", "U_LS_CANT", "U_LS_TIPO", "U_LS_LOTE")
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    row["CodigoCaja"],
+                    index + 1,
+                    row["CodigoItem"],
+                    row.get("Descripcion", None),  # Si la descripción es opcional
+                    row["CantidadItem"],
+                    row["TipoItem"],
+                    row["LoteItem"]
+                ))
+
+            conn.commit()
+            return jsonify({"mensaje": "Cajas importadas correctamente"}), 201
+
+        except Exception as e:
+            return jsonify({"error": f"Error al procesar el archivo Excel: {str(e)}"}), 500
+        finally:
+            conn.close()
+    else:
+        return jsonify({"error": "Archivo no permitido. Debe ser un archivo Excel (.xlsx)"}), 400
+
+
+# Función para permitir solo archivos Excel
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ['xlsx']
