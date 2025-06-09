@@ -1000,7 +1000,6 @@ def importar_cajas():
                     row["CodigoCaja"],
                     index + 1,
                     row["CodigoItem"],
-                    row.get("Descripcion", None),
                     row["CantidadItem"],
                     row["TipoItem"],
                     row["LoteItem"]
