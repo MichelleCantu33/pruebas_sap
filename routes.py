@@ -924,8 +924,15 @@ from werkzeug.utils import secure_filename
 import pandas as pd
 from flask import request, jsonify
 
+import os
+from werkzeug.utils import secure_filename
+import pandas as pd
+from flask import request, jsonify
+
 @app.route('/importar-cajas', methods=['POST'])
 def importar_cajas():
+    conn = None  # Asegúrate de que 'conn' esté definido aquí
+
     if 'file' not in request.files:
         return jsonify({"error": "No se ha enviado un archivo"}), 400
     
@@ -957,7 +964,7 @@ def importar_cajas():
                 if col not in df.columns:
                     return jsonify({"error": f"Falta la columna '{col}' en el archivo Excel"}), 400
 
-            # Conectar a SAP HANA y procesar el archivo
+            # Conectar a SAP HANA
             conn = get_hana_connection()
             if conn is None:
                 return jsonify({"error": "No se pudo conectar a HANA"}), 500
@@ -1006,10 +1013,13 @@ def importar_cajas():
 
         except Exception as e:
             return jsonify({"error": f"Error al procesar el archivo Excel: {str(e)}"}), 500
+
         finally:
-            conn.close()
+            if conn:
+                conn.close()  # Solo cierra la conexión si se creó correctamente
     else:
         return jsonify({"error": "Archivo no permitido. Debe ser un archivo Excel (.xlsx)"}), 400
+
 
 
 # Función para permitir solo archivos Excel
