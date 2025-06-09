@@ -886,38 +886,32 @@ def eliminar_caja_instrumental(codigo):
     finally:
         conn.close()
 
+
 @app.route('/warehouses', methods=['GET'])
 def warehouses():
-    login_sap_url = "https://54.184.71.204:50000/b1s/v1/Login"
-    sap_data = {
-        "CompanyDB": "EC_SBO_BIOCELLS_PROD",
-        "UserName": "manager",
-        "Password": "Start1234"
-    }
-
     try:
-        response = requests.post(login_sap_url, json=sap_data, verify=False)
-        if response.status_code != 200:
-            return jsonify({'error': 'Error en login', 'details': response.text}), response.status_code
+        # Conexión a SAP HANA
+        conn = get_hana_connection()
+        cursor = conn.cursor()
 
-        cookies = response.cookies
-        headers = {
-            'Content-Type': 'application/json',
-            'Cookie': f'B1SESSION={cookies.get("B1SESSION")}; ROUTEID={cookies.get("ROUTEID")}'
-        }
+        # Consulta para obtener bodegas desde la vista
+        query = """
+        SELECT "CodigoBodega", "NombreBodega"
+        FROM "PRU_BIOCELLS_20250509"."BIOCELLS_Bodegas"
+        """
+        cursor.execute(query)
 
-        # 👇 Aquí se obtienen todas las bodegas
-        response_warehouses = requests.get(
-            'https://54.184.71.204:50000/b1s/v1/Warehouses?$select=WarehouseCode,WarehouseName',
-            headers=headers,
-            verify=False
-        )
+        # Obtener los resultados
+        warehouses = cursor.fetchall()
 
-        if response_warehouses.status_code == 200:
-            data = response_warehouses.json()
-            return jsonify({'warehouses': data.get('value', [])})
-        else:
-            return jsonify({'error': 'Error al obtener bodegas', 'details': response_warehouses.text}), response_warehouses.status_code
+        # Cerrar la conexión
+        cursor.close()
+        conn.close()
+
+        # Formatear los resultados para la respuesta
+        warehouses_list = [{"CodigoBodega": w[0], "NombreBodega": w[1]} for w in warehouses]
+
+        return jsonify({'warehouses': warehouses_list})
 
     except Exception as e:
         return jsonify({'error': 'Fallo de conexión o excepción', 'details': str(e)}), 500
