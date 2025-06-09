@@ -919,6 +919,11 @@ def warehouses():
         return jsonify({'error': 'Fallo de conexión o excepción', 'details': str(e)}), 500
     
 # Ruta para manejar la carga del archivo Excel
+import os
+from werkzeug.utils import secure_filename
+import pandas as pd
+from flask import request, jsonify
+
 @app.route('/importar-cajas', methods=['POST'])
 def importar_cajas():
     if 'file' not in request.files:
@@ -930,11 +935,20 @@ def importar_cajas():
 
     if file and allowed_file(file.filename):
         filename = secure_filename(file.filename)
-        filepath = os.path.join('/path/to/save', filename)
+        
+        # Define la carpeta donde deseas guardar el archivo
+        upload_folder = '/path/to/save'  # Cambia esta ruta por una válida en tu servidor
+
+        # Verifica si la carpeta existe, si no, créala
+        if not os.path.exists(upload_folder):
+            os.makedirs(upload_folder)
+
+        # Guarda el archivo en la carpeta especificada
+        filepath = os.path.join(upload_folder, filename)
         file.save(filepath)
 
         try:
-            # Leemos el archivo Excel con pandas
+            # Lee el archivo Excel con pandas
             df = pd.read_excel(filepath)
 
             # Validar las columnas del archivo Excel
@@ -943,26 +957,23 @@ def importar_cajas():
                 if col not in df.columns:
                     return jsonify({"error": f"Falta la columna '{col}' en el archivo Excel"}), 400
 
-            # Conectar a SAP HANA
+            # Conectar a SAP HANA y procesar el archivo
             conn = get_hana_connection()
             if conn is None:
                 return jsonify({"error": "No se pudo conectar a HANA"}), 500
 
             cursor = conn.cursor()
             for index, row in df.iterrows():
-                # Comprobar si el código de la caja ya existe
                 cursor.execute("""
                     SELECT COUNT(*) FROM "PRU_BIOCELLS_20250509"."@LS_CAJ_CAB" WHERE "Code" = ?
                 """, (row["CodigoCaja"],))
                 if cursor.fetchone()[0] > 0:
-                    continue  # O manejar según lo que desees, como lanzar un error o loguear
+                    continue
 
-                # Obtener el nuevo DocEntry
                 cursor.execute('SELECT MAX("DocEntry") FROM "PRU_BIOCELLS_20250509"."@LS_CAJ_CAB"')
                 ultimo_docentry = cursor.fetchone()[0] or 0
                 nuevo_docentry = ultimo_docentry + 1
 
-                # Insertar cabecera
                 cursor.execute("""
                     INSERT INTO "PRU_BIOCELLS_20250509"."@LS_CAJ_CAB"
                     ("DocEntry", "Code", "U_LS_FECHA", "U_LS_ALM", "U_LS_CLASECAJA", "U_LS_ITEM")
@@ -976,7 +987,6 @@ def importar_cajas():
                     row["CodigoCaja"]
                 ))
 
-                # Insertar líneas
                 cursor.execute("""
                     INSERT INTO "PRU_BIOCELLS_20250509"."@LS_CAJ_LIN"
                     ("Code", "LineId", "U_LS_ITEM", "U_LS_ITEM_NAME", "U_LS_CANT", "U_LS_TIPO", "U_LS_LOTE")
@@ -985,7 +995,7 @@ def importar_cajas():
                     row["CodigoCaja"],
                     index + 1,
                     row["CodigoItem"],
-                    row.get("Descripcion", None),  # Si la descripción es opcional
+                    row.get("Descripcion", None),
                     row["CantidadItem"],
                     row["TipoItem"],
                     row["LoteItem"]
