@@ -919,106 +919,78 @@ def warehouses():
         return jsonify({'error': 'Fallo de conexión o excepción', 'details': str(e)}), 500
     
 # Ruta para manejar la carga del archivo Excel
-
-
-@app.route('/importar-cajas', methods=['POST'])
-def importar_cajas():
-    conn = None  # Asegúrate de que 'conn' esté definido aquí
-
+@app.route('/cajas-instrumental-archivo', methods=['POST'])
+def carga_masiva_cajas():
     if 'file' not in request.files:
-        return jsonify({"error": "No se ha enviado un archivo"}), 400
-    
+        return jsonify({"error": "No se encontró ningún archivo"}), 400
+
     file = request.files['file']
-    if file.filename == '':
-        return jsonify({"error": "No se ha seleccionado un archivo"}), 400
+    
+    try:
+        # Leer hojas de Excel
+        df_encabezado = pd.read_excel(file, sheet_name="Encabezado")
+        df_lineas = pd.read_excel(file, sheet_name="Lineas")
 
-    if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
-        
-        # Define la carpeta donde deseas guardar el archivo
-        upload_folder = '/path/to/save'  # Cambia esta ruta por una válida en tu servidor
+        conn = get_hana_connection()
+        if conn is None:
+            return jsonify({"error": "No se pudo conectar a HANA"}), 500
+        cursor = conn.cursor()
 
-        # Verifica si la carpeta existe, si no, créala
-        if not os.path.exists(upload_folder):
-            os.makedirs(upload_folder)
+        cajas_creadas = []
+        errores = []
 
-        # Guarda el archivo en la carpeta especificada
-        filepath = os.path.join(upload_folder, filename)
-        file.save(filepath)
+        for _, row in df_encabezado.iterrows():
+            codigo_caja = str(row["CodigoCaja"])
+            fecha_caja = str(row["FechaCaja"])
+            almacen = row["Almacen"]
+            clase_caja = row["ClaseCaja"]
 
-        try:
-            # Lee el archivo Excel con pandas
-            df = pd.read_excel(filepath)
+            # Verificar existencia
+            cursor.execute("""SELECT COUNT(*) FROM "PRU_BIOCELLS_20250509"."@LS_CAJ_CAB" WHERE "Code" = ?""", (codigo_caja,))
+            if cursor.fetchone()[0] > 0:
+                errores.append(f"La caja con código '{codigo_caja}' ya existe")
+                continue
 
-            # Limpiar los nombres de las columnas
-            df.columns = df.columns.str.strip()
+            # Nuevo DocEntry
+            cursor.execute('SELECT MAX("DocEntry") FROM "PRU_BIOCELLS_20250509"."@LS_CAJ_CAB"')
+            ultimo_docentry = cursor.fetchone()[0] or 0
+            nuevo_docentry = ultimo_docentry + 1
 
-            # Imprimir las columnas leídas desde el archivo Excel
-            print("Columnas limpias del archivo Excel:", df.columns)
+            # Insertar cabecera
+            cursor.execute("""
+                INSERT INTO "PRU_BIOCELLS_20250509"."@LS_CAJ_CAB"
+                ("DocEntry", "Code", "U_LS_FECHA", "U_LS_ALM", "U_LS_CLASECAJA", "U_LS_ITEM")
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (nuevo_docentry, codigo_caja, fecha_caja, almacen, clase_caja, codigo_caja))
 
-            # Validar las columnas del archivo Excel
-            required_columns = ["CodigoCaja", "FechaCaja", "Almacen", "ClaseCaja", "CodigoItem", "CantidadItem", "TipoItem", "LoteItem"]
-            for col in required_columns:
-                if col not in df.columns:
-                    return jsonify({"error": f"Falta la columna '{col}' en el archivo Excel"}), 400
-
-            # Conectar a SAP HANA
-            conn = get_hana_connection()
-            if conn is None:
-                return jsonify({"error": "No se pudo conectar a HANA"}), 500
-
-            cursor = conn.cursor()
-            for index, row in df.iterrows():
-                cursor.execute("""
-                    SELECT COUNT(*) FROM "PRU_BIOCELLS_20250509"."@LS_CAJ_CAB" WHERE "Code" = ?
-                """, (row["CodigoCaja"],))
-                if cursor.fetchone()[0] > 0:
-                    continue
-
-                cursor.execute('SELECT MAX("DocEntry") FROM "PRU_BIOCELLS_20250509"."@LS_CAJ_CAB"')
-                ultimo_docentry = cursor.fetchone()[0] or 0
-                nuevo_docentry = ultimo_docentry + 1
-
-                cursor.execute("""
-                    INSERT INTO "PRU_BIOCELLS_20250509"."@LS_CAJ_CAB"
-                    ("DocEntry", "Code", "U_LS_FECHA", "U_LS_ALM", "U_LS_CLASECAJA", "U_LS_ITEM")
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (
-                    nuevo_docentry,
-                    row["CodigoCaja"],
-                    row["FechaCaja"],
-                    row["Almacen"],
-                    row["ClaseCaja"],
-                    row["CodigoCaja"]
-                ))
-
+            # Filtrar líneas de la caja actual
+            lineas_caja = df_lineas[df_lineas["CodigoCaja"] == codigo_caja]
+            for i, linea in enumerate(lineas_caja.itertuples(), start=1):
                 cursor.execute("""
                     INSERT INTO "PRU_BIOCELLS_20250509"."@LS_CAJ_LIN"
                     ("Code", "LineId", "U_LS_ITEM", "U_LS_ITEM_NAME", "U_LS_CANT", "U_LS_TIPO", "U_LS_LOTE")
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    row["CodigoCaja"],
-                    index + 1,
-                    row["CodigoItem"],
-                    row["CantidadItem"],
-                    row["TipoItem"],
-                    row["LoteItem"]
+                    codigo_caja,
+                    i,
+                    getattr(linea, "CodigoItem"),
+                    getattr(linea, "Descripcion", None),
+                    getattr(linea, "CantidadItem"),
+                    getattr(linea, "TipoItem"),
+                    getattr(linea, "LoteItem")
                 ))
 
-            conn.commit()
-            return jsonify({"mensaje": "Cajas importadas correctamente"}), 201
+            cajas_creadas.append(codigo_caja)
 
-        except Exception as e:
-            return jsonify({"error": f"Error al procesar el archivo Excel: {str(e)}"}), 500
+        conn.commit()
+        return jsonify({
+            "mensaje": f"Proceso finalizado",
+            "cajas_creadas": cajas_creadas,
+            "errores": errores
+        }), 200
 
-        finally:
-            if conn:
-                conn.close()  # Solo cierra la conexión si se creó correctamente
-    else:
-        return jsonify({"error": "Archivo no permitido. Debe ser un archivo Excel (.xlsx)"}), 400
-
-
-
-# Función para permitir solo archivos Excel
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ['xlsx']
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"error": f"Error en la carga masiva: {str(e)}"}), 500
+    finally:
+        conn.close()
