@@ -93,7 +93,7 @@ def check_inventory_transfer():
 
         # Obtener los filtros desde los parámetros de la consulta
         document_status = request.args.get('DocumentStatus', 'bost_Open')
-        sales_person_code = request.args.get('SalesPersonCode', '66')
+        sales_person_code = request.args.get('SalesPersonCode', '56')
 
         # Realizamos la solicitud al endpoint InventoryTransferRequests con los filtros
         filter_url = "https://54.184.71.204:50000/b1s/v1/InventoryTransferRequests"
