@@ -7,8 +7,6 @@ class User(db.Model):
     
     Id = db.Column(db.Integer, primary_key=True)
     Nombre = db.Column(db.String(100), nullable=False)
-    Usuario = db.Column(db.String(50), unique=True, nullable=False)
-    Password = db.Column(db.String(255), nullable=False)
     Correo = db.Column(db.String(100), unique=True, nullable=False)
     Rol = db.Column(db.String(50), nullable=False)
 
