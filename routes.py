@@ -1004,13 +1004,14 @@ def verificar_usuario():
     if not correo:
         return jsonify({"error": "Correo no proporcionado"}), 400
 
-    usuario = User.query.filter_by(correo=correo).first()
+    usuario = User.query.filter_by(Correo=correo).first()
 
     if not usuario:
         return jsonify({"error": "Correo no registrado"}), 404
 
     return jsonify({
-        "nombre": usuario.nombre,
-        "correo": usuario.correo,
-        "rol": usuario.rol
+        "nombre": usuario.Nombre,
+        "correo": usuario.Correo,
+        "rol": usuario.Rol
     }), 200
+
