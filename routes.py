@@ -521,79 +521,99 @@ def stock_transfer_archivo():
         return jsonify({"error": "No se encontró ningún archivo"}), 400
 
     file = request.files['file']
-    
+
     try:
-        # Leer las hojas del Excel
+        # Leer hojas del Excel
         df_encabezado = pd.read_excel(file, sheet_name="Encabezado")
         df_lineas = pd.read_excel(file, sheet_name="Lineas")
         df_lotes = pd.read_excel(file, sheet_name="Lotes")
 
-        # 🔹 Convertir fechas a string en el encabezado
-        for col in ["DocDate", "DueDate", "TaxDate", "CreationDate", "UpdateDate"]:
-            if col in df_encabezado.columns:
-                df_encabezado[col] = df_encabezado[col].astype(str)
+        # 🔸 Traducir columnas a nombres estándar
+        encabezado_map = {
+            "Fecha Documento": "DocDate",
+            "Fecha Vencimiento": "DueDate",
+            "Código Cliente": "CardCode",
+            "Comentarios": "Comments",
+            "Desde Bodega": "FromWarehouse",
+            "Hacia Bodega": "ToWarehouse",
+            "Fecha Impuestos": "TaxDate"
+        }
+        df_encabezado.rename(columns=encabezado_map, inplace=True)
 
-        # 🔹 Convertir encabezado a JSON
+        lineas_map = {
+            "Nro Línea": "LineNum",
+            "Código Ítem": "ItemCode",
+            "Cantidad": "Quantity"
+        }
+        df_lineas.rename(columns=lineas_map, inplace=True)
+
+        lotes_map = {
+            "Lote": "BatchNumber",
+            "Cantidad": "Quantity",
+            "Nro Línea Base": "BaseLineNumber",
+            "Código Ítem": "ItemCode"
+        }
+        df_lotes.rename(columns=lotes_map, inplace=True)
+
+        # 🔸 Formatear fechas del encabezado
+        for col in ["DocDate", "DueDate", "TaxDate"]:
+            if col in df_encabezado.columns:
+                df_encabezado[col] = pd.to_datetime(df_encabezado[col]).dt.strftime('%Y-%m-%d')
+
+        # 🔸 Convertir encabezado a dict
         encabezado = df_encabezado.iloc[0].to_dict()
 
-        # Convertir líneas a JSON
+        # 🔸 Agregar valores fijos y dinámicos
+        encabezado["Printed"] = "tNO"
+        encabezado["Series"] = 27
+        encabezado["JournalMemo"] = f"Inventory Transfers - {encabezado.get('CardCode', '')}"
+
+        # 🔸 Procesar líneas
         lineas_json = []
         for _, row in df_lineas.iterrows():
-            # 🔹 Convertir fechas en las líneas si hay alguna
             for col in ["ExpiryDate"]:
                 if col in row and not pd.isna(row[col]):
                     row[col] = str(row[col])
 
-            # Filtrar los lotes correspondientes a esta línea
-            lotes = df_lotes[df_lotes["BaseLineNumber"] == row["LineNum"]].copy()
+            # Heredar bodegas desde el encabezado si no están presentes
+            if "FromWarehouseCode" not in row or pd.isna(row.get("FromWarehouseCode")):
+                row["FromWarehouseCode"] = encabezado.get("FromWarehouse")
+            if "WarehouseCode" not in row or pd.isna(row.get("WarehouseCode")):
+                row["WarehouseCode"] = encabezado.get("ToWarehouse")
 
-            # 🔹 Convertir fechas en los lotes
+            lotes = df_lotes[df_lotes["BaseLineNumber"] == row["LineNum"]].copy()
             for col in ["ExpiryDate"]:
                 if col in lotes.columns:
                     lotes[col] = lotes[col].astype(str)
-
             lotes_json = lotes.to_dict(orient="records")
 
-            # Convertir línea a diccionario
             linea = row.to_dict()
-            linea["BatchNumbers"] = lotes_json  # Agregar lotes a la línea
-
+            linea["BatchNumbers"] = lotes_json
             lineas_json.append(linea)
 
-        # Construir JSON final
         json_data = encabezado
         json_data["StockTransferLines"] = lineas_json
 
-        # 🔹 CONEXIÓN A SAP 🔹
+        # 🔸 Login SAP
         login_sap_url = "https://54.184.71.204:50000/b1s/v1/Login"
         sap_data = {
             "CompanyDB": "PRU_BIOCELLS_20250509",
-            "UserName": "manager",  # Usuario fijo para SAP
-            "Password": "Start1234"  # Contraseña fija para SAP
+            "UserName": "manager",
+            "Password": "Start1234"
         }
-
-        # Realizar login en SAP
         response = requests.post(login_sap_url, json=sap_data, verify=False)
 
         if response.status_code == 200:
-            # Obtener las cookies de sesión
             cookies = response.cookies
-            print("Cookies obtenidas del login:", cookies)
-
-            # URL de SAP para la transferencia de stock
             sap_url = "https://54.184.71.204:50000/b1s/v1/StockTransfers"
-
-            # Construir los encabezados con las cookies obtenidas
             headers = {
                 'Content-Type': 'application/json',
                 'Cookie': f'B1SESSION={cookies.get("B1SESSION")}; ROUTEID={cookies.get("ROUTEID")}'
             }
-
-            # Enviar solicitud a SAP
             transfer_response = requests.post(sap_url, json=json_data, headers=headers, verify=False)
 
             if transfer_response.status_code == 201:
-                return jsonify(transfer_response.json()), transfer_response.status_code
+                return jsonify(transfer_response.json()), 201
             else:
                 return jsonify({'error': 'Error en SAP', 'details': transfer_response.text}), transfer_response.status_code
 
@@ -602,6 +622,7 @@ def stock_transfer_archivo():
 
     except Exception as e:
         return jsonify({"error": "Error procesando el archivo", "details": str(e)}), 500
+
     
 @app.route('/create_inventory_transfer/<int:doc_entry>', methods=['POST'])
 def create_inventory_transfer(doc_entry):
